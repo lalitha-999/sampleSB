@@ -1,0 +1,105 @@
+node{
+ try {
+ //notifyBuild('STARTED')
+
+stage("SourceCode-Checkout"){
+
+    //enable remote triggers
+  /* script {
+       properties([pipelineTriggers([pollSCM('* * * * *')])])
+       //properties([pipelineTriggers([gitlabPush()])])
+    }*/
+
+     //git credentialsId: 'ZkServices-MIOT-DevPortal-Key', url: 'ssh://git@192.168.1.11:10022/miverraiot-platform/developer-portal/developerportal.git'
+   checkout([$class: 'GitSCM', branches: [[name: 'origin/master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'DisableRemotePoll']], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'Jenkins-PriveKey-ZkService', url: 'ssh://git@192.168.1.11:10022/miverraiot-platform/authentication-service/authorization.git']]])
+       /*gitlabCommitStatus {
+
+      
+}*/
+}
+   
+stage("Sonar-Analysis"){
+def scannerHome = tool 'SonarQube-Scanner';
+    withSonarQubeEnv('SonarQube') { // If you have configured more than one global server connection, you can specify its name
+      sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=ZkServices-Authorization -Dsonar.sources=./src -Dsonar.java.binaries=. -Dsonar.scm.disabled=True -Dsonar.sourceEncoding=UTF-8 -Dsonar.language=java"
+    }
+}
+
+stage("Build-Artifact") {
+   sh "chmod +x gradlew"
+    //sh './gradlew assemble'
+    //sh './gradlew build'
+    sh './gradlew clean'
+   // sh './gradlew build -x test '
+    // sh './gradlew jar'
+    sh  './gradlew bootjar'
+   //sh './gradlew bootRun --debug'
+ }
+stage("Docker-Login"){
+withCredentials([usernamePassword(credentialsId: 'sana_nexus_docker_repo_logins', passwordVariable: 'zkservice_nexus_docker_passwd', usernameVariable: 'zkservice_nexus_docker_user')]) {
+sh "sudo docker login -u $zkservice_nexus_docker_user -p $zkservice_nexus_docker_passwd 192.168.1.11:8123"
+  }
+
+  }
+stage("Docker-Push"){
+   
+    // some block
+    //sh 'sudo docker login -u admin -p NexusAdmin@123 192.168.1.11:8123'
+  withCredentials([usernamePassword(credentialsId: 'sana_nexus_docker_repo_logins', passwordVariable: 'zkservice_nexus_docker_passwd', usernameVariable: 'zkservice_nexus_docker_user')]) {
+sh "sudo docker login -u $zkservice_nexus_docker_user -p $zkservice_nexus_docker_passwd 192.168.1.11:8123"
+sh label: '', script: '''
+    sudo docker build -t zkservice-authorization:latest -f /root/ZkServices/Authorization/Dockerfile .
+    sudo docker tag zkservice-authorization:latest 192.168.1.11:8123/zkservice-authorization:latest
+    sudo docker push 192.168.1.11:8123/zkservice-authorization:latest'''
+}
+}
+stage ("Deploy")
+{
+sh label: '', script: ''' sudo ssh  root@192.168.1.13 ls '''
+withCredentials([usernamePassword(credentialsId: 'sana_nexus_docker_repo_logins', passwordVariable: 'zkservice_nexus_docker_passwd', usernameVariable: 'zkservice_nexus_docker_user')]) {
+sh "sudo docker login -u $zkservice_nexus_docker_user -p $zkservice_nexus_docker_passwd 192.168.1.11:8123"
+  // some block
+    //sh 'sudo docker login -u admin -p NexusAdmin@123 192.168.1.11:8123'
+    //sh 'sudo ssh  root@192.168.1.13 docker login -u admin -p NexusAdmin@123 192.168.1.11:8123'
+//sh "sudo ssh  root@192.168.1.13 cd /root/MIOT-Docker/MIOT-Authorization/"
+sh 'sudo ssh  root@192.168.1.13 docker-compose -f  /root/MIOT-Docker/MIOT-Authorization/docker-compose-auth-server.yml up --build --force-recreate -d'
+}
+}
+}catch (e) {
+     // If there was an exception thrown, the build failed
+     currentBuild.result = "FAILED"
+     throw e
+   } finally {
+ // Success or failure, always send notifications
+
+ stage("Email-Notification"){
+        notifyBuild(currentBuild.result)
+        //emailext body: '', recipientProviders: [developers(), buildUser()], subject: '', to: 'sana@zkteco.in'
+         echo "EmailNotification"
+  }
+
+   }
+}
+ def notifyBuild(String buildStatus = 'STARTED') {
+   // build status of null means successful
+   buildStatus =  buildStatus ?: 'SUCCESSFUL'
+
+   // Default values
+   def colorName = 'RED'
+   def colorCode = '#FF0000'
+   def subject = "${buildStatus}: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'"
+   def summary = "${subject} (${env.BUILD_URL})"
+   def details = """<p>STARTED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]':</p>
+   <p>Check console output at "<a href="${env.BUILD_URL}">${env.JOB_NAME} [${env.BUILD_NUMBER}]</a>"</p>"""
+
+
+  emailext (
+      to: "Sana@zkteco.in, lalitha@zkteco.in",
+       subject: subject,
+       body: details,
+       attachLog: true
+      // recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+      //recipientProviders: [[zkindia_rd28@zkteco.com]]
+     )
+    
+}

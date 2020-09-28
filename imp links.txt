@@ -1,0 +1,25 @@
+
+cidr range of ips:
+10.4.10.0/25
+10.4.10.128/26
+10.4.10.192/27
+10.4.10.224/28
+10.4.10.240/29
+10.4.10.248/30
+10.4.10.252/31
+10.4.10.254/32
+
+
+
+sonar.coverage.jacoco.xmlReportPaths	
+
+sonar.junit.reportPaths	
+
+
+https://tomgregory.com/how-to-measure-code-coverage-using-sonarqube-and-jacoco/
+
+https://blog.sonatype.com/using-nexus-3-as-your-repository-part-3-docker-images
+
+https://www.ivankrizsan.se/2016/06/09/create-a-private-docker-registry/
+
+https://stackoverflow.com/questions/32612650/how-to-get-docker-compose-to-always-re-create-containers-from-fresh-images
